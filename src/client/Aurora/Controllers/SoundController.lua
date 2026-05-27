@@ -7,7 +7,11 @@ local sounds = {}
 
 function SoundController:Play(name)
     if sounds[name] then
-        sounds[name]:Play()
+        local function SafePlay(sound)
+            if not sound or sound.SoundId == "" or sound.SoundId == "rbxassetid://0" or sound.SoundId == "0" then return end
+            sound:Play()
+        end
+        SafePlay(sounds[name])
     end
 end
 

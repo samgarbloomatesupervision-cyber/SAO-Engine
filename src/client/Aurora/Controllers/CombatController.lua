@@ -1,77 +1,82 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Knit = require(ReplicatedStorage.Shared.Knit)
 
+local StateMachine = require(ReplicatedStorage.Titan:WaitForChild("StateMachine"))
+local ComboSystem = require(ReplicatedStorage.Orion:WaitForChild("ComboSystem"))
+
 local CombatController = Knit.CreateController { Name = "CombatController" }
 
-local function shakeCamera(intensity, duration)
-    local character = Players.LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    if not humanoid then return end
-    task.spawn(function()
-        local endTime = os.clock() + duration
-        while os.clock() < endTime do
-            humanoid.CameraOffset = Vector3.new(math.random(-intensity, intensity)/100, math.random(-intensity, intensity)/100, 0)
-            task.wait()
-        end
-        humanoid.CameraOffset = Vector3.new(0, 0, 0)
-    end)
-end
-
-local function hitstop(duration)
-    local character = Players.LocalPlayer.Character
-    local humanoid = character and character:FindFirstChild("Humanoid")
-    local animator = humanoid and humanoid:FindFirstChild("Animator")
-    if not animator then return end
-    
-    local tracks = animator:GetPlayingAnimationTracks()
-    for _, track in ipairs(tracks) do track:AdjustSpeed(0) end
-    task.wait(duration)
-    for _, track in ipairs(tracks) do track:AdjustSpeed(1) end
-end
-
-local function screenFlash()
-    local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-    local flash = Instance.new("Frame", playerGui:WaitForChild("MainHUD"))
-    flash.Size = UDim2.fromScale(1,1)
-    flash.BackgroundColor3 = Color3.new(1,1,1)
-    flash.BackgroundTransparency = 0.7
-    flash.ZIndex = 100
-    TweenService:Create(flash, TweenInfo.new(0.08), {BackgroundTransparency = 1}):Play()
-    game:GetService("Debris"):AddItem(flash, 0.1)
-end
-
 function CombatController:KnitStart()
+    local player = Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    
+    self.SM = StateMachine.new()
+    self.Combo = ComboSystem.new()
+    
     local SkillEngine = Knit.GetService("SkillEngine")
-    local SoundController = Knit.GetController("SoundController")
-    local Events = ReplicatedStorage:WaitForChild("Events")
-
+    
+    -- 🖱️ COMBAT INPUT
     UserInputService.InputBegan:Connect(function(input, gpe)
-        if gpe then return end 
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local success = SkillEngine:RequestSkillExecution("VerticalSlash")
-            if success then
-                SoundController:Play("SWORD_SWING")
-                local char = Players.LocalPlayer.Character
-                local animator = char and char.Humanoid:FindFirstChild("Animator")
-                if animator then
-                    local anim = Instance.new("Animation")
-                    anim.AnimationId = "rbxassetid://18408103328"
-                    animator:LoadAnimation(anim):Play()
-                end
-                shakeCamera(15, 0.2)
-            end
+        if gpe then return end
+        
+        local state = self.SM:Get()
+        
+        -- 1. ATTACK
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and state.CanAttack then
+            self:ExecuteAttack(SkillEngine, humanoid)
+        end
+        
+        -- 2. DASH (Q or double tap direction)
+        if input.KeyCode == Enum.KeyCode.Q and state.CanDash then
+            self:ExecuteDash(humanoid)
         end
     end)
+end
 
-    -- Listen to hits for hitstop and flash
-    Events.DamageDealt.OnClientEvent:Connect(function(target, amount, isCrit)
-        -- We only apply hitstop if the local player is the attacker (mocked check)
-        hitstop(isCrit and 0.1 or 0.05)
-        if isCrit then screenFlash() end
+function CombatController:ExecuteAttack(SkillEngine, humanoid)
+    local comboIndex = self.Combo:Next()
+    local animId = self.Combo:GetAnimation("Sword")
+    
+    self.SM:SetState("Attacking", 0.5) -- Locked for 0.5s
+    
+    -- Visual / Animation
+    local anim = Instance.new("Animation")
+    anim.AnimationId = animId
+    local track = humanoid:LoadAnimation(anim)
+    track:Play()
+    
+    -- Request Server for Damage / Hitbox
+    SkillEngine:RequestSkill("BasicAttack_" .. comboIndex)
+    
+    -- Screen FX (Prometheus compliant)
+    task.spawn(function()
+        humanoid.AutoRotate = false
+        task.wait(0.4)
+        humanoid.AutoRotate = true
     end)
+end
+
+function CombatController:ExecuteDash(humanoid)
+    local root = humanoid.RootPart
+    if not root then return end
+    
+    self.SM:SetState("Dodging", 0.4) -- 0.4s of I-Frames
+    
+    local dashVelocity = Instance.new("LinearVelocity")
+    local attachment = Instance.new("Attachment", root)
+    dashVelocity.MaxForce = 100000
+    dashVelocity.VectorVelocity = root.CFrame.LookVector * 60
+    dashVelocity.Attachment0 = attachment
+    dashVelocity.Parent = root
+    
+    game:GetService("Debris"):AddItem(dashVelocity, 0.2)
+    game:GetService("Debris"):AddItem(attachment, 0.2)
+    
+    -- Visual Dash FX
+    print("[TITAN] Dash I-Frames Active!")
 end
 
 return CombatController

@@ -15,12 +15,13 @@ local CardinalBridge = require(Integrations:WaitForChild("CardinalBridge"))
 
 local Atlas = {}
 
-function Atlas.ProcessGitHubAsset(url, targetPosition)
+function Atlas.ProcessGitHubAsset(url, targetPosition, query)
     print("----------------------------------------")
     print("🤖 ATLAS GITHUB : Downloading -> " .. url)
     
     local fileData = GitHubFetcher.FetchFile(url)
     if not fileData then return nil end
+    fileData.Query = query
     
     local model = GitHubImporter.ImportModel(fileData)
     if not model then return nil end
@@ -52,7 +53,6 @@ function Atlas.ProcessGitHubAsset(url, targetPosition)
     return meta
 end
 
--- 🌟 NEW: Process entire packs from GitHub Registry
 function Atlas.ProcessPack(query)
     local packs = GitHubRegistry.FindPack(query)
     if not packs then
@@ -62,15 +62,13 @@ function Atlas.ProcessPack(query)
 
     print("📦 ATLAS : Processing Pack collection for " .. query)
     for _, pack in ipairs(packs) do
-        -- Simulate processing the main asset of the pack
-        Atlas.ProcessGitHubAsset(pack.Url .. "/main/Model.obj")
+        Atlas.ProcessGitHubAsset(pack.Url .. "/main/Model.obj", nil, query)
     end
 end
 
 function Atlas.ProcessQuery(query, nameOverride, targetPosition)
-    -- Map natural query to GitHub Registry or simulated URL
     local dummyUrl = "https://raw.githubusercontent.com/SAO-Engine/Assets/main/" .. query:gsub(" ", "_") .. ".obj"
-    return Atlas.ProcessGitHubAsset(dummyUrl, targetPosition)
+    return Atlas.ProcessGitHubAsset(dummyUrl, targetPosition, query)
 end
 
 return Atlas
