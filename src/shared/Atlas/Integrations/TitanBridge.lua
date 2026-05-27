@@ -1,0 +1,1 @@
+-- Envoie les mobs vers l'IA

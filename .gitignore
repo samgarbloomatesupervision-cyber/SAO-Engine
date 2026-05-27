@@ -1,0 +1,18 @@
+# SAO Engine - GitHub Synchronization Ignore
+# General
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# Roblox Specific
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+roblox_config/
+
+# Environment
+.env
+.vscode/
+.gemini/
